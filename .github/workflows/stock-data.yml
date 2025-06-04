@@ -25,7 +25,17 @@ jobs:
         run: |
           python stock_data_extractor.py
           
+      - name: Check if CSV exists
+        id: check_csv
+        run: |
+          if [ -f "amd_stock_data.csv" ]; then
+            echo "csv_exists=true" >> $GITHUB_ENV
+          else
+            echo "csv_exists=false" >> $GITHUB_ENV
+          fi
+
       - name: Commit and push changes
+        if: env.csv_exists == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "GitHub Action"
