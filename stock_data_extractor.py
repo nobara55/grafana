@@ -1,85 +1,132 @@
 #!/usr/bin/env python3
 """
-Script simplificado para extraer datos de AMD
+Stock Data Extractor - AMD
+Extrae datos diarios del stock de AMD y los guarda en CSV
 """
 
 import yfinance as yf
 import pandas as pd
-from datetime import datetime
+from datetime import datetime, timedelta
 import os
+import sys
 
 def main():
-    print("=== Iniciando extracción de datos AMD ===")
+    """Función principal para extraer datos de AMD"""
     
-    # Crear directorio data si no existe
-    if not os.path.exists('data'):
-        os.makedirs('data')
-        print("Directorio 'data' creado")
+    print("=" * 50)
+    print("Stock Data Extractor - AMD")
+    print(f"Fecha de ejecución: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print("=" * 50)
     
     try:
-        # Descargar datos de AMD
-        print("Descargando datos de AMD...")
-        amd = yf.Ticker("AMD")
+        # Configuración
+        ticker_symbol = "AMD"
+        output_file = "amd_stock_data.csv"  # Nombre que espera el workflow
         
-        # Obtener datos históricos (últimos 5 días)
-        hist = amd.history(period="5d")
+        # Crear objeto ticker
+        print(f"\n📊 Descargando datos de {ticker_symbol}...")
+        ticker = yf.Ticker(ticker_symbol)
         
-        if hist.empty:
-            print("No se encontraron datos")
-            return
+        # Obtener datos históricos (últimos 30 días para tener suficiente información)
+        end_date = datetime.now()
+        start_date = end_date - timedelta(days=30)
         
-        # Obtener último día de trading
-        last_date = hist.index[-1]
-        last_data = hist.iloc[-1]
+        # Descargar datos
+        historical_data = ticker.history(start=start_date, end=end_date)
         
-        print(f"Último día de trading: {last_date.date()}")
-        print(f"Precio de cierre: ${last_data['Close']:.2f}")
+        if historical_data.empty:
+            print("❌ No se pudieron obtener datos históricos")
+            sys.exit(1)
         
-        # Preparar datos para guardar
-        new_row = {
-            'Date': last_date.strftime('%Y-%m-%d'),
-            'Open': last_data['Open'],
-            'High': last_data['High'],
-            'Low': last_data['Low'],
-            'Close': last_data['Close'],
-            'Volume': last_data['Volume']
-        }
+        # Obtener información adicional del ticker
+        info = ticker.info
         
-        # Archivo CSV
-        csv_file = 'data/amd_stock_history.csv'
+        # Preparar DataFrame con datos relevantes
+        df = historical_data.copy()
+        df['Symbol'] = ticker_symbol
         
-        # Leer datos existentes o crear nuevo DataFrame
-        if os.path.exists(csv_file):
-            df = pd.read_csv(csv_file)
-            # Verificar si el día ya existe
-            if new_row['Date'] not in df['Date'].values:
-                df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-                df.to_csv(csv_file, index=False)
-                print(f"Datos agregados a {csv_file}")
-            else:
-                print(f"Los datos para {new_row['Date']} ya existen")
-        else:
-            df = pd.DataFrame([new_row])
-            df.to_csv(csv_file, index=False)
-            print(f"Archivo creado: {csv_file}")
+        # Agregar columnas adicionales si están disponibles
+        if info:
+            df['MarketCap'] = info.get('marketCap', None)
+            df['PERatio'] = info.get('trailingPE', None)
+            df['Beta'] = info.get('beta', None)
         
-        # También guardar un archivo JSON con el último día
-        import json
-        json_file = f"data/amd_latest.json"
-        with open(json_file, 'w') as f:
-            json.dump(new_row, f, indent=4, default=str)
-        print(f"Datos guardados en {json_file}")
+        # Resetear índice para que Date sea una columna
+        df.reset_index(inplace=True)
         
-        print("=== Extracción completada ===")
+        # Formatear fecha
+        df['Date'] = df['Date'].dt.strftime('%Y-%m-%d')
+        
+        # Reorganizar columnas
+        columns_order = ['Date', 'Symbol', 'Open', 'High', 'Low', 'Close', 'Volume']
+        if 'MarketCap' in df.columns:
+            columns_order.extend(['MarketCap', 'PERatio', 'Beta'])
+        
+        df = df[columns_order]
+        
+        # Guardar en CSV
+        df.to_csv(output_file, index=False)
+        print(f"\n✅ Datos guardados exitosamente en '{output_file}'")
+        
+        # Mostrar resumen del último día
+        latest_data = df.iloc[-1]
+        print(f"\n📈 Resumen del último día de trading ({latest_data['Date']}):")
+        print(f"   Apertura:  ${latest_data['Open']:.2f}")
+        print(f"   Máximo:    ${latest_data['High']:.2f}")
+        print(f"   Mínimo:    ${latest_data['Low']:.2f}")
+        print(f"   Cierre:    ${latest_data['Close']:.2f}")
+        print(f"   Volumen:   {int(latest_data['Volume']):,}")
+        
+        # Calcular cambio porcentual
+        if len(df) > 1:
+            previous_close = df.iloc[-2]['Close']
+            change = latest_data['Close'] - previous_close
+            change_percent = (change / previous_close) * 100
+            print(f"   Cambio:    ${change:.2f} ({change_percent:+.2f}%)")
+        
+        # Información adicional si está disponible
+        if info:
+            print(f"\n📊 Información adicional de {ticker_symbol}:")
+            print(f"   Nombre:           {info.get('longName', 'N/A')}")
+            print(f"   Sector:           {info.get('sector', 'N/A')}")
+            print(f"   Industria:        {info.get('industry', 'N/A')}")
+            print(f"   Capitalización:   ${info.get('marketCap', 0):,.0f}")
+            print(f"   P/E Ratio:        {info.get('trailingPE', 'N/A')}")
+            print(f"   Beta:             {info.get('beta', 'N/A')}")
+            print(f"   52 semanas alto:  ${info.get('fiftyTwoWeekHigh', 'N/A')}")
+            print(f"   52 semanas bajo:  ${info.get('fiftyTwoWeekLow', 'N/A')}")
+        
+        print("\n✅ Extracción completada exitosamente")
+        
+        # Verificar que el archivo se creó correctamente
+        if os.path.exists(output_file):
+            file_size = os.path.getsize(output_file)
+            print(f"📁 Archivo creado: {output_file} ({file_size} bytes)")
+        
+        return 0
         
     except Exception as e:
-        print(f"Error: {str(e)}")
-        # Crear archivo de prueba para verificar que el workflow funciona
-        test_file = 'data/test_file.txt'
-        with open(test_file, 'w') as f:
-            f.write(f"Test ejecutado el {datetime.now()}\n")
-            f.write(f"Error encontrado: {str(e)}\n")
-        print(f"Archivo de prueba creado: {test_file}")
+        print(f"\n❌ Error durante la extracción: {str(e)}")
+        
+        # Crear archivo vacío para evitar que falle el workflow
+        try:
+            # Crear un CSV mínimo con datos de prueba
+            emergency_data = pd.DataFrame([{
+                'Date': datetime.now().strftime('%Y-%m-%d'),
+                'Symbol': 'AMD',
+                'Open': 0.0,
+                'High': 0.0,
+                'Low': 0.0,
+                'Close': 0.0,
+                'Volume': 0,
+                'Error': str(e)
+            }])
+            emergency_data.to_csv(output_file, index=False)
+            print(f"⚠️  Archivo de emergencia creado: {output_file}")
+        except:
+            print("❌ No se pudo crear archivo de emergencia")
+        
+        return 1
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
