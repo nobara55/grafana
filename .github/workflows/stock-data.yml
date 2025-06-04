@@ -25,6 +25,9 @@ jobs:
         run: |
           python stock_data_extractor.py
           
+      - name: List files (debug)
+        run: ls -la
+          
       - name: Check if CSV exists
         id: check_csv
         run: |
