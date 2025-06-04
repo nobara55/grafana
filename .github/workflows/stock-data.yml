@@ -1,132 +1,34 @@
-name: AMD Stock Data Update
+name: AMD Stock Update
 
 on:
-  # Ejecutar de lunes a viernes a las 4:30 PM EST (21:30 UTC)
   schedule:
     - cron: '30 21 * * 1-5'
-  
-  # Permitir ejecución manual
   workflow_dispatch:
 
 jobs:
-  update-amd-data:
+  update:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    
     steps:
-    # Paso 1: Obtener el código del repositorio
-    - name: Checkout
-      uses: actions/checkout@v3
-    
-    # Paso 2: Configurar Python
-    - name: Setup Python
-      uses: actions/setup-python@v4
+    - uses: actions/checkout@v3
+    - uses: actions/setup-python@v4
       with:
         python-version: '3.10'
-    
-    # Paso 3: Extraer y guardar datos de AMD
-    - name: Extract AMD Stock Data
+    - run: pip install yfinance
+    - name: Get AMD Data
       run: |
-        echo "🚀 Iniciando extracción de datos AMD..."
-        
-        # Instalar yfinance
-        pip install yfinance
-        
-        # Script Python inline
-        python << 'END_PYTHON'
-import yfinance as yf
-from datetime import datetime
-import sys
-
-print(f"📅 Fecha de ejecución: {datetime.now()}")
-print("=" * 50)
-
-try:
-    # Descargar datos de AMD (últimos 5 días)
-    print("📊 Descargando datos de AMD...")
-    ticker = yf.Ticker("AMD")
-    data = ticker.history(period="5d")
-    
-    if data.empty:
-        print("❌ No se obtuvieron datos del mercado")
-        # Crear archivo con mensaje de error
-        with open('amd_stock_data.csv', 'w') as f:
-            f.write('Date,Status,Message\n')
-            f.write(f'{datetime.now():%Y-%m-%d},ERROR,No market data available\n')
-    else:
-        # Guardar datos en CSV
-        data.to_csv('amd_stock_data.csv')
-        
-        # Mostrar resumen
-        last_price = data['Close'].iloc[-1]
-        last_date = data.index[-1].strftime('%Y-%m-%d')
-        rows = len(data)
-        
-        print(f"✅ Archivo 'amd_stock_data.csv' creado exitosamente")
-        print(f"📈 Registros guardados: {rows}")
-        print(f"💰 Último precio de cierre: ${last_price:.2f}")
-        print(f"📅 Última fecha: {last_date}")
-        
-        # Información adicional
-        info = ticker.info
-        print(f"\n📊 Información adicional de AMD:")
-        print(f"   Nombre: {info.get('longName', 'Advanced Micro Devices, Inc.')}")
-        print(f"   Sector: {info.get('sector', 'Technology')}")
-        print(f"   Market Cap: ${info.get('marketCap', 0):,.0f}")
-        print(f"   P/E Ratio: {info.get('trailingPE', 'N/A')}")
-        
-        # Cálculo de cambio diario
-        if len(data) > 1:
-            prev_close = data['Close'].iloc[-2]
-            change = last_price - prev_close
-            change_pct = (change / prev_close) * 100
-            print(f"   Cambio diario: ${change:.2f} ({change_pct:+.2f}%)")
-            
-except Exception as e:
-    print(f"❌ Error: {str(e)}")
-    # Crear archivo CSV con información del error
-    with open('amd_stock_data.csv', 'w') as f:
-        f.write('Date,Status,Error\n')
-        f.write(f'{datetime.now():%Y-%m-%d},ERROR,{str(e)}\n')
-    print("⚠️ Archivo de error creado")
-
-print("=" * 50)
-print("✅ Proceso completado")
-END_PYTHON
-    
-    # Paso 4: Verificar que el archivo se creó
-    - name: Verify File Creation
+        cat > get_amd.py << 'EOF'
+        import yfinance as yf
+        data = yf.download("AMD", period="5d", progress=False)
+        data.to_csv("amd_stock_data.csv")
+        print("Done")
+        EOF
+        python get_amd.py
+    - name: Push
       run: |
-        echo "🔍 Verificando archivos..."
-        if [ -f "amd_stock_data.csv" ]; then
-          echo "✅ amd_stock_data.csv existe"
-          echo "📊 Primeras líneas del archivo:"
-          head -10 amd_stock_data.csv
-        else
-          echo "❌ Error: amd_stock_data.csv no fue creado"
-          exit 1
-        fi
-    
-    # Paso 5: Commit y push de los cambios
-    - name: Commit and Push
-      run: |
-        # Configurar Git
-        git config --global user.name "GitHub Actions Bot"
-        git config --global user.email "actions@github.com"
-        
-        # Agregar archivo
-        git add amd_stock_data.csv
-        
-        # Verificar si hay cambios
-        if git diff --staged --quiet; then
-          echo "ℹ️ No hay cambios nuevos en los datos"
-        else
-          # Hacer commit con mensaje descriptivo
-          COMMIT_MSG="📊 Update AMD stock data - $(date +'%Y-%m-%d %H:%M:%S UTC')"
-          git commit -m "$COMMIT_MSG"
-          
-          # Push
-          git push
-          echo "✅ Datos actualizados en el repositorio"
-        fi
+        git config user.name "Actions"
+        git config user.email "actions@github.com"
+        git add -A
+        git commit -m "Update $(date +'%Y-%m-%d')" || true
+        git push || true
