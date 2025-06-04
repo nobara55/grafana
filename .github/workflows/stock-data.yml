@@ -34,12 +34,28 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
+    - name: Crear directorio data si no existe
+      run: mkdir -p data
+    
     - name: Ejecutar extractor
       run: python amd_stock_extractor.py
     
+    - name: Verificar archivos generados
+      run: |
+        echo "Contenido del directorio data:"
+        ls -la data/ || echo "No hay archivos en data/"
+        echo "Contenido del directorio raíz:"
+        ls -la
+    
     - name: Commit y Push cambios
       run: |
-        git config --local user.email "action@github.com"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
         git config --local user.name "GitHub Action"
-        git add data/
-        git diff --quiet && git diff --staged --quiet || (git commit -m "📊 Actualización diaria de datos AMD - $(date +'%Y-%m-%d')" && git push)
+        git add data/ || echo "No hay archivos para agregar en data/"
+        git add . || echo "No hay archivos para agregar"
+        if git diff --quiet && git diff --staged --quiet; then
+          echo "No hay cambios para commit"
+        else
+          git commit -m "📊 Actualización diaria de datos AMD - $(date +'%Y-%m-%d %H:%M:%S')"
+          git push
+        fi
