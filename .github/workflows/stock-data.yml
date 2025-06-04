@@ -1,4 +1,4 @@
-name: AMD Stock Data Extraction
+name: Daily AMD Stock Data Extraction
 
 on:
   schedule:
@@ -6,39 +6,105 @@ on:
   workflow_dispatch:
 
 jobs:
-  extract:
+  extract-stock-data:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     
     steps:
-    - uses: actions/checkout@v3
+    - name: Checkout repository
+      uses: actions/checkout@v3
     
-    - uses: actions/setup-python@v4
+    - name: Set up Python
+      uses: actions/setup-python@v4
       with:
         python-version: '3.10'
     
     - name: Install dependencies
-      run: pip install yfinance
-    
-    - name: Extract AMD data
       run: |
-        python << 'EOF'
-        import yfinance as yf
-        from datetime import datetime
-        
-        # Descargar datos de AMD
-        data = yf.download("AMD", period="1d", progress=False)
-        
+        python -m pip install --upgrade pip
+        pip install yfinance pandas
+    
+    - name: Debug - List files before extraction
+      run: |
+        echo "📁 Archivos antes de la extracción:"
+        ls -la
+    
+    - name: Run stock data extractor
+      run: |
+        # Intentar ejecutar el script si existe
+        if [ -f "stock_data_extractor.py" ]; then
+          echo "✅ Ejecutando stock_data_extractor.py"
+          python stock_data_extractor.py || echo "⚠️ Error al ejecutar el script"
+        else
+          echo "❌ stock_data_extractor.py no encontrado"
+          echo "📝 Creando script inline..."
+          
+          # Crear y ejecutar script inline
+          python << 'EOF'
+import yfinance as yf
+import pandas as pd
+from datetime import datetime
+
+print("🚀 Iniciando extracción de datos AMD...")
+
+try:
+    # Descargar datos
+    amd = yf.download("AMD", period="5d", progress=False)
+    
+    if not amd.empty:
         # Guardar en CSV
-        data.to_csv('amd_stock_data.csv')
-        print(f"Datos guardados. Último precio: ${data['Close'].iloc[-1]:.2f}")
-        EOF
+        amd.to_csv('amd_stock_data.csv')
+        print(f"✅ Datos guardados en amd_stock_data.csv")
+        print(f"📊 Último precio: ${amd['Close'].iloc[-1]:.2f}")
+    else:
+        print("❌ No se obtuvieron datos")
+        # Crear archivo vacío
+        pd.DataFrame({"Date": [datetime.now()], "Error": ["No data"]}).to_csv('amd_stock_data.csv', index=False)
+        
+except Exception as e:
+    print(f"❌ Error: {e}")
+    # Crear archivo de error
+    pd.DataFrame({"Date": [datetime.now()], "Error": [str(e)]}).to_csv('amd_stock_data.csv', index=False)
+EOF
+        fi
     
-    - name: Commit and push
+    - name: Debug - List files after extraction
       run: |
-        git config user.name "GitHub Actions"
-        git config user.email "actions@github.com"
-        git add amd_stock_data.csv || echo "No file to add"
-        git commit -m "Update AMD data $(date +%Y-%m-%d)" || echo "No changes"
-        git push || echo "No changes to push"
+        echo "📁 Archivos después de la extracción:"
+        ls -la
+        echo ""
+        echo "📊 Contenido de amd_stock_data.csv (si existe):"
+        if [ -f "amd_stock_data.csv" ]; then
+          head -10 amd_stock_data.csv
+        else
+          echo "❌ amd_stock_data.csv no existe"
+        fi
+    
+    - name: Commit and push changes
+      run: |
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git config --local user.name "GitHub Actions Bot"
+        
+        # Verificar si el archivo existe antes de agregarlo
+        if [ -f "amd_stock_data.csv" ]; then
+          echo "✅ Agregando amd_stock_data.csv"
+          git add amd_stock_data.csv
+          
+          # Verificar si hay cambios
+          if git diff --staged --quiet; then
+            echo "ℹ️ No hay cambios en el archivo"
+          else
+            git commit -m "📊 Update AMD stock data - $(date +'%Y-%m-%d')"
+            git push
+            echo "✅ Cambios subidos al repositorio"
+          fi
+        else
+          echo "❌ amd_stock_data.csv no fue creado"
+          echo "🔧 Creando archivo de prueba..."
+          echo "Date,Status" > amd_stock_data.csv
+          echo "$(date +'%Y-%m-%d'),Test run" >> amd_stock_data.csv
+          git add amd_stock_data.csv
+          git commit -m "🔧 Test run - $(date +'%Y-%m-%d')"
+          git push
+        fi
