@@ -1,0 +1,36 @@
+name: AMD Stock Data Extractor
+
+on:
+  schedule:
+    - cron: "15 20 * * 1-5"  # Lunes a viernes a las 20:15 UTC (16:15 ET)
+  workflow_dispatch:
+
+jobs:
+  extract-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+          
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          
+      - name: Run data extraction script
+        run: |
+          python stock_data_extractor.py
+          
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "GitHub Action"
+          git add amd_stock_data.csv
+          git commit -m "Update AMD data $(date +%Y-%m-%d)"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
